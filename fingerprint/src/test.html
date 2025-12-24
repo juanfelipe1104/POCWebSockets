@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>SYE Fingerprint - Demo</title>
+    <style>
+      body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 24px; }
+      .row { display: flex; gap: 16px; flex-wrap: wrap; align-items: center; }
+      label { display: flex; gap: 8px; align-items: center; }
+      input[type="text"] { width: 520px; max-width: 100%; padding: 8px; }
+      button { padding: 10px 14px; cursor: pointer; }
+      pre { background: #0b1020; color: #e7e7e7; padding: 14px; border-radius: 10px; overflow: auto; }
+      .ok { color: #1a7f37; font-weight: 600; }
+      .err { color: #d1242f; font-weight: 600; }
+      small { color: #555; }
+    </style>
+
+    <!-- Carga del WebComponent (ajusta la ruta al dist) -->
+    <script type="module" src="./dist/device-fingerprint.min.js"></script>
+
+    <!-- (Opcional) Si quieres sobreescribir la URL del API en runtime sin rebuild:
+    <script>
+      window.__FP_API_URL__ = "https://tu-dominio.com/fingerprint";
+    </script>
+    -->
+  </head>
+
+  <body>
+    <h1>Demo SYE_FINGERPRINT</h1>
+    <p>
+      Esta página inicializa el WebComponent y recibe notificaciones vía <code>onSuccess/onError</code>
+      y eventos DOM (<code>fingerprint-success</code>/<code>fingerprint-error</code>).
+    </p>
+
+    <div class="row">
+      <label>
+        <input id="cfgDeviceId" type="checkbox" checked />
+        deviceId
+      </label>
+      <label>
+        <input id="cfgFpSoft" type="checkbox" checked />
+        fpSoft
+      </label>
+      <label>
+        <input id="cfgFpHard" type="checkbox" />
+        fpHard (high-entropy)
+      </label>
+      <label>
+        <input id="cfgSendSignals" type="checkbox" />
+        sendSignals (raw)
+      </label>
+    </div>
+
+    <div style="height: 12px"></div>
+
+    <div>
+      <label for="tokenTransaction"><strong>tokenTransaction</strong></label><br />
+      <input id="tokenTransaction" type="text" placeholder="tx_..." />
+      <div><small>Se enviará como header <code>X-Transaction</code></small></div>
+    </div>
+
+    <div style="height: 12px"></div>
+
+    <div>
+      <label for="accessToken"><strong>accessToken</strong></label><br />
+      <input id="accessToken" type="text" placeholder="eyJ..." />
+      <div><small>Se enviará como header <code>Authorization: Bearer ...</code></small></div>
+    </div>
+
+    <div style="height: 12px"></div>
+
+    <div class="row">
+      <label>
+        timeoutMs
+        <input id="timeoutMs" type="text" value="8000" style="width: 90px" />
+      </label>
+
+      <label>
+        retry.attempts
+        <input id="retryAttempts" type="text" value="2" style="width: 60px" />
+      </label>
+
+      <label>
+        retry.baseDelayMs
+        <input id="retryBaseDelay" type="text" value="250" style="width: 70px" />
+      </label>
+
+      <label>
+        retry.maxDelayMs
+        <input id="retryMaxDelay" type="text" value="2000" style="width: 80px" />
+      </label>
+    </div>
+
+    <div style="height: 16px"></div>
+
+    <div class="row">
+      <button id="runBtn">Ejecutar fingerprint + POST</button>
+      <span id="status"></span>
+    </div>
+
+    <div style="height: 16px"></div>
+
+    <!-- El WebComponent -->
+    <device-fingerprint id="fp"></device-fingerprint>
+
+    <h2>Salida</h2>
+    <pre id="output">{}</pre>
+
+    <script type="module">
+      const fpEl = document.getElementById("fp");
+      const out = document.getElementById("output");
+      const statusEl = document.getElementById("status");
+
+      // Escucha eventos DOM (útil para integraciones genéricas)
+      fpEl.addEventListener("fingerprint-success", (e) => {
+        statusEl.textContent = "SUCCESS (evento DOM)";
+        statusEl.className = "ok";
+        out.textContent = JSON.stringify(e.detail, null, 2);
+      });
+
+      fpEl.addEventListener("fingerprint-error", (e) => {
+        statusEl.textContent = "ERROR (evento DOM)";
+        statusEl.className = "err";
+        out.textContent = JSON.stringify(e.detail, null, 2);
+      });
+
+      document.getElementById("runBtn").addEventListener("click", async () => {
+        statusEl.textContent = "Ejecutando...";
+        statusEl.className = "";
+        out.textContent = "{}";
+
+        const tokenTransaction = document.getElementById("tokenTransaction").value.trim();
+        const accessToken = document.getElementById("accessToken").value.trim();
+
+        const config = {
+          deviceId: document.getElementById("cfgDeviceId").checked,
+          fpSoft: document.getElementById("cfgFpSoft").checked,
+          fpHard: document.getElementById("cfgFpHard").checked,
+          sendSignals: document.getElementById("cfgSendSignals").checked,
+          timeoutMs: Number(document.getElementById("timeoutMs").value) || 8000,
+          retry: {
+            attempts: Number(document.getElementById("retryAttempts").value) || 2,
+            baseDelayMs: Number(document.getElementById("retryBaseDelay").value) || 250,
+            maxDelayMs: Number(document.getElementById("retryMaxDelay").value) || 2000
+          }
+        };
+
+        try {
+          // Callbacks (DX cómodo)
+          const result = await fpEl.init(tokenTransaction, accessToken, config, {
+            onSuccess: (envelope) => {
+              // envelope = { component: "SYE_FINGERPRINT", detail: {...} }
+              statusEl.textContent = "SUCCESS (callback)";
+              statusEl.className = "ok";
+              out.textContent = JSON.stringify(envelope, null, 2);
+            },
+            onError: (envelope) => {
+              statusEl.textContent = "ERROR (callback)";
+              statusEl.className = "err";
+              out.textContent = JSON.stringify(envelope, null, 2);
+            }
+          });
+
+          // Si quieres usar el retorno directo:
+          // console.log("await result:", result);
+
+        } catch (err) {
+          // Si además quieres capturar el throw (por ejemplo para analytics):
+          console.error("init threw:", err);
+        }
+      });
+    </script>
+  </body>
+</html>
