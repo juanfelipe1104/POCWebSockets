@@ -61,7 +61,6 @@ function validate(documentType, documentValueRaw) {
     }
 
     case "PAP": {
-      // Pasaporte: letras y números
       if (!isAlphaNum(value)) {
         return { ok: false, message: "Pasaporte inválido. Solo se permiten letras y números." };
       }
@@ -69,7 +68,6 @@ function validate(documentType, documentValueRaw) {
     }
 
     case "PPT": {
-      // Permiso Temporal: 1..100.000.000
       const n = parseSafeInt(value);
       if (n === null) return { ok: false, message: "PPT inválido. Solo se permiten números." };
       if (n < 1 || n > 100_000_000) {
@@ -88,14 +86,12 @@ class SYEIdentification extends HTMLElement {
     super();
     this.attachShadow({ mode: "open" });
 
-    // Credenciales / config
     this._transactionToken = null;
     this._accessToken = null;
     this._config = {};
     this._onSuccess = null;
     this._onError = null;
 
-    // UI refs
     this.$ = {};
   }
 
@@ -117,59 +113,15 @@ class SYEIdentification extends HTMLElement {
 
   render() {
     const style = `
-      :host {
-        font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
-        display: block;
-      }
-      .wrap {
-        border: 1px solid #e5e7eb;
-        border-radius: 12px;
-        padding: 14px;
-        max-width: 420px;
-      }
-      .row {
-        display: grid;
-        grid-template-columns: 140px 1fr;
-        gap: 10px;
-        margin-bottom: 10px;
-      }
-      label {
-        font-size: 12px;
-        color: #374151;
-        margin-bottom: 6px;
-        display: block;
-      }
-      select, input {
-        width: 100%;
-        padding: 10px;
-        border: 1px solid #d1d5db;
-        border-radius: 10px;
-        outline: none;
-        font-size: 14px;
-      }
-      input:disabled, select:disabled, button:disabled {
-        opacity: 0.6;
-        cursor: not-allowed;
-      }
-      button {
-        width: 100%;
-        padding: 10px 12px;
-        border: 0;
-        border-radius: 10px;
-        font-size: 14px;
-        cursor: pointer;
-      }
-      .msg {
-        margin-top: 10px;
-        font-size: 13px;
-        color: #b91c1c;
-        min-height: 18px;
-      }
-      .hint {
-        margin-top: 6px;
-        font-size: 12px;
-        color: #6b7280;
-      }
+      :host { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; display:block; }
+      .wrap { border:1px solid #e5e7eb; border-radius:12px; padding:14px; max-width:420px; }
+      .row { display:grid; grid-template-columns:140px 1fr; gap:10px; margin-bottom:10px; }
+      label { font-size:12px; color:#374151; margin-bottom:6px; display:block; }
+      select, input { width:100%; padding:10px; border:1px solid #d1d5db; border-radius:10px; outline:none; font-size:14px; }
+      input:disabled, select:disabled, button:disabled { opacity:.6; cursor:not-allowed; }
+      button { width:100%; padding:10px 12px; border:0; border-radius:10px; font-size:14px; cursor:pointer; }
+      .msg { margin-top:10px; font-size:13px; color:#b91c1c; min-height:18px; }
+      .hint { margin-top:6px; font-size:12px; color:#6b7280; }
     `;
 
     const html = `
@@ -249,30 +201,43 @@ class SYEIdentification extends HTMLElement {
     this.$.msg.textContent = message;
   }
 
+  // ---- NUEVO: emite eventos DOM
+  emit(name, detail) {
+    // Eventos fuera del Shadow DOM: composed:true
+    this.dispatchEvent(
+      new CustomEvent(name, {
+        bubbles: true,
+        composed: true,
+        detail: { component: COMPONENT_NAME, detail }
+      })
+    );
+  }
+
+  // ---- callbacks + eventos
   callOnError(detail) {
-    if (this._onError) {
-      this._onError({ component: COMPONENT_NAME, detail });
-    }
+    const payload = { component: COMPONENT_NAME, detail };
+    if (this._onError) this._onError(payload);
+    this.emit("onError", detail);
   }
 
   callOnSuccess(detail = "") {
-    if (this._onSuccess) {
-      this._onSuccess({ component: COMPONENT_NAME, detail });
-    }
+    const payload = { component: COMPONENT_NAME, detail };
+    if (this._onSuccess) this._onSuccess(payload);
+    this.emit("onSuccess", detail);
   }
 
   async handleContinue() {
     const docType = this.$.docType.value;
     const docNumber = this.$.docNumber.value;
 
-    // Validación local
     const v = validate(docType, docNumber);
     if (!v.ok) {
       this.failUser(v.message);
+      // Si quieres que también dispare onError por validación local, descomenta:
+      // this.callOnError({ error: "ValidationError", message: v.message });
       return;
     }
 
-    // URL desde .env (Vite expone import.meta.env.*)
     const apiUrl = import.meta.env.VITE_REGISTER_IDENTIFICATION_URL;
     if (!apiUrl) {
       const detail = { error: "MissingEnv", message: "Falta VITE_REGISTER_IDENTIFICATION_URL en .env" };
@@ -281,7 +246,6 @@ class SYEIdentification extends HTMLElement {
       return;
     }
 
-    // Validación de init
     if (!this._transactionToken || !this._accessToken) {
       const detail = { error: "MissingInit", message: "Debes llamar init(transactionToken, accessToken, ...)" };
       this.failUser("El componente no está inicializado.");
@@ -289,7 +253,6 @@ class SYEIdentification extends HTMLElement {
       return;
     }
 
-    // POST al API
     this.setLoading(true);
     try {
       const payload = {
@@ -315,7 +278,6 @@ class SYEIdentification extends HTMLElement {
         body = { raw: text };
       }
 
-      // Regla: éxito solo si HTTP 200 y body {code:200}
       if (res.status === 200 && body && body.code === 200) {
         this.callOnSuccess(body);
       } else {

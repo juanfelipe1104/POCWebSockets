@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1.0" />
+    <title>Demo SYE_EMAIL_PHONE</title>
+  </head>
+  <body style="margin:24px;background:#f6f7f9;">
+    <h2 style="font-family:system-ui;margin:0 0 14px;">Demo SYE_EMAIL_PHONE</h2>
+
+    <!-- En dev, Vite sirve el módulo directo -->
+    <script type="module" src="/src/sye-email-phone.js"></script>
+
+    <sye-email-phone id="cmp"></sye-email-phone>
+
+    <pre id="log" style="margin-top:16px;padding:12px;background:#111;color:#eee;border-radius:12px;overflow:auto;"></pre>
+
+    <script type="module">
+      const cmp = document.getElementById("cmp");
+      const log = document.getElementById("log");
+
+      const transactionToken = "TX_123";
+      const accessToken = "ACCESS_TOKEN_JWT";
+
+      // Callbacks
+      function onSuccess(payload) {
+        log.textContent += `\n[CALLBACK onSuccess]\n${JSON.stringify(payload, null, 2)}\n`;
+      }
+      function onError(payload) {
+        log.textContent += `\n[CALLBACK onError]\n${JSON.stringify(payload, null, 2)}\n`;
+      }
+
+      // Eventos
+      cmp.addEventListener("sye:success", (e) => {
+        log.textContent += `\n[EVENT sye:success]\n${JSON.stringify(e.detail, null, 2)}\n`;
+      });
+      cmp.addEventListener("sye:error", (e) => {
+        log.textContent += `\n[EVENT sye:error]\n${JSON.stringify(e.detail, null, 2)}\n`;
+      });
+
+      // init(transactionToken, accessToken, config, onSuccess, onError)
+      cmp.init(transactionToken, accessToken, {
+        // apiUrl: "https://api.tudominio.com/REGISTER_EMAIL_PHONE", // opcional si no usas .env
+        // allowedPrefixes: ["300","301", ...] // opcional para override
+      }, onSuccess, onError);
+    </script>
+  </body>
+</html>

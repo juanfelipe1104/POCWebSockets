@@ -13,33 +13,35 @@
 
     <pre id="log" style="margin-top:16px; padding:12px; border:1px solid #ddd; border-radius:12px;"></pre>
 
-    <!-- Importa el bundle minificado (después de build) -->
     <script src="/dist/sye-identification.min.js"></script>
 
     <script>
       const log = (x) => {
-        const el = document.getElementById("log");
-        el.textContent = typeof x === "string" ? x : JSON.stringify(x, null, 2);
+        document.getElementById("log").textContent =
+          typeof x === "string" ? x : JSON.stringify(x, null, 2);
       };
 
       const el = document.getElementById("ident");
 
-      // Simula credenciales
+      // 1) Eventos DOM
+      el.addEventListener("onSuccess", (e) => {
+        log({ via: "event", type: "onSuccess", payload: e.detail });
+      });
+
+      el.addEventListener("onError", (e) => {
+        log({ via: "event", type: "onError", payload: e.detail });
+      });
+
+      // 2) Callbacks init()
       const transactionToken = "tx-123";
       const accessToken = "access-token-jwt";
 
       el.init(
         transactionToken,
         accessToken,
-        { /* config futuro si quieres */ },
-        (evt) => {
-          // onSuccess
-          log({ onSuccess: true, evt });
-        },
-        (evt) => {
-          // onError
-          log({ onSuccess: false, evt });
-        }
+        {},
+        (payload) => log({ via: "callback", type: "onSuccess", payload }),
+        (payload) => log({ via: "callback", type: "onError", payload })
       );
     </script>
   </body>
