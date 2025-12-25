@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Demo - SYE Identification</title>
+  </head>
+
+  <body style="padding:24px">
+    <h2>Demo WebComponent: Identificación</h2>
+
+    <sye-identification id="ident"></sye-identification>
+
+    <pre id="log" style="margin-top:16px; padding:12px; border:1px solid #ddd; border-radius:12px;"></pre>
+
+    <!-- Importa el bundle minificado (después de build) -->
+    <script src="/dist/sye-identification.min.js"></script>
+
+    <script>
+      const log = (x) => {
+        const el = document.getElementById("log");
+        el.textContent = typeof x === "string" ? x : JSON.stringify(x, null, 2);
+      };
+
+      const el = document.getElementById("ident");
+
+      // Simula credenciales
+      const transactionToken = "tx-123";
+      const accessToken = "access-token-jwt";
+
+      el.init(
+        transactionToken,
+        accessToken,
+        { /* config futuro si quieres */ },
+        (evt) => {
+          // onSuccess
+          log({ onSuccess: true, evt });
+        },
+        (evt) => {
+          // onError
+          log({ onSuccess: false, evt });
+        }
+      );
+    </script>
+  </body>
+</html>
