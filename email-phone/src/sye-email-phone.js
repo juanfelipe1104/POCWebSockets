@@ -1,36 +1,30 @@
-/* src/sye-email-phone.js
- * SYE_EMAIL_PHONE - WebComponent
- * - UI: Email + Teléfono (móvil CO sin indicativo) + botón Continuar
- * - Validaciones:
- *    email: formato básico
- *    teléfono CO: SOLO 10 dígitos, empieza por 3, prefijo permitido
- * - Integración:
- *    init(transactionToken, accessToken, config, onSuccess, onError)
- *    POST a REGISTER_EMAIL_PHONE (apiUrl desde .env o config.apiUrl)
- * - Notifica:
- *    Callbacks: onSuccess/onError(payload)
- *    Eventos: "sye:success" y "sye:error"
- *    En ambos casos incluye: { component:"SYE_EMAIL_PHONE", detail:"..." }
+/* SYE_EMAIL_PHONE - WebComponent
+ * - Captura email + teléfono móvil colombiano (SIN indicativo país)
+ * - Validaciones estrictas
+ * - API: REGISTER_EMAIL_PHONE
+ * - Headers:
+ *    X-Transaction: transactionToken
+ *    Authorization: Bearer accessToken
+ * - Callbacks + Eventos
  */
 
 const DEFAULT_ALLOWED_PREFIXES = [
-  // Tigo / UNE (históricos comunes)
+  // Tigo / UNE
   "300", "301", "302", "303", "304", "324",
   // ETB
   "305",
-  // Claro (Comcel)
+  // Claro
   "310", "311", "312", "313", "314", "320", "321", "322", "323",
   // Movistar
   "315", "316", "317", "318",
   // Virgin
   "319",
-  // Suma Móvil (MVNO)
+  // Suma móvil
   "333",
   // Avantel
   "350", "351"
 ];
 
-// Email “práctico” (no pretende ser RFC completo)
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/i;
 
 function dispatch(component, type, payload) {
@@ -39,13 +33,7 @@ function dispatch(component, type, payload) {
   );
 }
 
-/**
- * Valida móvil colombiano SIN indicativo de país:
- * - exactamente 10 dígitos
- * - inicia por 3
- * - prefijo (3 dígitos) en lista permitida
- */
-function validateColombianMobileNoCountry(rawPhone, allowedPrefixes) {
+function validateColombianMobile(rawPhone, allowedPrefixes) {
   const phone = String(rawPhone || "").replace(/\D+/g, "");
 
   if (phone.length !== 10) {
@@ -75,14 +63,11 @@ export class SYE_EMAIL_PHONE extends HTMLElement {
     super();
     this.attachShadow({ mode: "open" });
 
-    // Estado
     this._transactionToken = null;
     this._accessToken = null;
     this._config = {};
     this._onSuccess = null;
     this._onError = null;
-
-    // UI refs
     this._els = {};
   }
 
@@ -106,32 +91,7 @@ export class SYE_EMAIL_PHONE extends HTMLElement {
     this._onError = typeof onError === "function" ? onError : null;
   }
 
-  setLoading(isLoading) {
-    const { btn, spinner } = this._els;
-    if (!btn) return;
-    btn.disabled = isLoading || this.hasAttribute("disabled");
-    if (spinner) spinner.style.display = isLoading ? "inline-block" : "none";
-    btn.setAttribute("aria-busy", isLoading ? "true" : "false");
-  }
-
-  syncDisabled() {
-    const { email, phone, btn } = this._els;
-    const disabled = this.hasAttribute("disabled");
-    if (email) email.disabled = disabled;
-    if (phone) phone.disabled = disabled;
-    if (btn) btn.disabled = disabled;
-  }
-
-  setMessage(msg = "", kind = "error") {
-    const { msgBox } = this._els;
-    if (!msgBox) return;
-    msgBox.textContent = msg;
-    msgBox.dataset.kind = kind;
-    msgBox.style.display = msg ? "block" : "none";
-  }
-
   getApiUrl() {
-    // Prioridad: config.apiUrl > .env (Vite) > ""
     return (
       this._config.apiUrl ||
       (import.meta?.env?.VITE_REGISTER_EMAIL_PHONE_URL ?? "")
@@ -140,46 +100,57 @@ export class SYE_EMAIL_PHONE extends HTMLElement {
 
   getAllowedPrefixes() {
     const list = this._config.allowedPrefixes;
-    return Array.isArray(list) && list.length ? list.map(String) : DEFAULT_ALLOWED_PREFIXES;
+    return Array.isArray(list) && list.length
+      ? list.map(String)
+      : DEFAULT_ALLOWED_PREFIXES;
+  }
+
+  setLoading(v) {
+    const { btn, spinner } = this._els;
+    btn.disabled = v || this.hasAttribute("disabled");
+    spinner.style.display = v ? "inline-block" : "none";
+  }
+
+  syncDisabled() {
+    const d = this.hasAttribute("disabled");
+    Object.values(this._els).forEach(el => {
+      if (el && "disabled" in el) el.disabled = d;
+    });
+  }
+
+  setMessage(msg = "", kind = "error") {
+    const { msgBox } = this._els;
+    msgBox.textContent = msg;
+    msgBox.dataset.kind = kind;
+    msgBox.style.display = msg ? "block" : "none";
   }
 
   async onContinue() {
     try {
       this.setMessage("");
 
-      // Guardrails de init
-      if (!this._transactionToken) {
-        throw new Error("Falta transactionToken. Llama init(...) antes de usar el componente.");
-      }
-      if (!this._accessToken) {
-        throw new Error("Falta accessToken. Llama init(...) antes de usar el componente.");
-      }
+      if (!this._transactionToken) throw new Error("transactionToken requerido");
+      if (!this._accessToken) throw new Error("accessToken requerido");
 
       const apiUrl = this.getApiUrl();
-      if (!apiUrl) {
-        throw new Error("No hay apiUrl configurada. Define VITE_REGISTER_EMAIL_PHONE_URL o config.apiUrl.");
-      }
+      if (!apiUrl) throw new Error("apiUrl no configurada");
 
-      const email = (this._els.email?.value || "").trim();
-      const phoneRaw = (this._els.phone?.value || "").trim();
+      const email = this._els.email.value.trim();
+      const phoneRaw = this._els.phone.value.trim();
 
       if (!EMAIL_RE.test(email)) {
-        this.setMessage("Email inválido. Revisa el formato (ej: nombre@dominio.com).");
+        this.setMessage("Email inválido.");
         return;
       }
 
-      const allowed = this.getAllowedPrefixes();
-      const v = validateColombianMobileNoCountry(phoneRaw, allowed);
-      if (!v.ok) {
-        this.setMessage(v.reason);
+      const phoneCheck = validateColombianMobile(
+        phoneRaw,
+        this.getAllowedPrefixes()
+      );
+      if (!phoneCheck.ok) {
+        this.setMessage(phoneCheck.reason);
         return;
       }
-
-      const payload = {
-        transactionToken: this._transactionToken,
-        email,
-        phone: v.phone
-      };
 
       this.setLoading(true);
 
@@ -187,70 +158,60 @@ export class SYE_EMAIL_PHONE extends HTMLElement {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          "X-Transaction": this._transactionToken,
           "Authorization": `Bearer ${this._accessToken}`
         },
-        body: JSON.stringify(payload)
+        body: JSON.stringify({
+          email,
+          phone: phoneCheck.phone
+        })
       });
 
-      const text = await res.text();
-      let data = null;
-      try {
-        data = text ? JSON.parse(text) : null;
-      } catch {
-        data = { raw: text };
-      }
+      const data = await res.json().catch(() => null);
 
       if (!res.ok) {
-        const detail = data?.message || data?.error || `HTTP ${res.status}`;
-        const errPayload = {
+        const err = {
           component: "SYE_EMAIL_PHONE",
-          detail,
-          status: res.status,
-          response: data
+          detail: data?.message || `HTTP ${res.status}`,
+          status: res.status
         };
-        this.setMessage(`No fue posible registrar: ${detail}`);
-        if (this._onError) this._onError(errPayload);
-        dispatch(this, "sye:error", errPayload);
+        this.setMessage(err.detail);
+        this._onError?.(err);
+        dispatch(this, "sye:error", err);
         return;
       }
 
-      const okPayload = {
+      const ok = {
         component: "SYE_EMAIL_PHONE",
         detail: "REGISTER_EMAIL_PHONE_OK",
         response: data
       };
 
       this.setMessage("Registro exitoso.", "ok");
-      if (this._onSuccess) this._onSuccess(okPayload);
-      dispatch(this, "sye:success", okPayload);
+      this._onSuccess?.(ok);
+      dispatch(this, "sye:success", ok);
+
     } catch (e) {
-      const errPayload = {
+      const err = {
         component: "SYE_EMAIL_PHONE",
-        detail: e?.message || "UNKNOWN_ERROR"
+        detail: e.message || "ERROR"
       };
-      this.setMessage(errPayload.detail);
-      if (this._onError) this._onError(errPayload);
-      dispatch(this, "sye:error", errPayload);
+      this.setMessage(err.detail);
+      this._onError?.(err);
+      dispatch(this, "sye:error", err);
     } finally {
       this.setLoading(false);
     }
   }
 
   bind() {
-    const { btn, phone } = this._els;
+    this._els.btn.addEventListener("click", () => this.onContinue());
 
-    btn?.addEventListener("click", () => this.onContinue());
-
-    // Enter para continuar
-    this.shadowRoot?.addEventListener("keydown", (ev) => {
-      if (ev.key === "Enter") {
-        const tag = (ev.target?.tagName || "").toLowerCase();
-        if (tag === "input") this.onContinue();
-      }
+    this.shadowRoot.addEventListener("keydown", e => {
+      if (e.key === "Enter") this.onContinue();
     });
 
-    // Solo dígitos, máximo 10 (sin indicativo)
-    phone?.addEventListener("input", (e) => {
+    this._els.phone.addEventListener("input", e => {
       e.target.value = e.target.value.replace(/\D/g, "").slice(0, 10);
     });
 
@@ -258,103 +219,31 @@ export class SYE_EMAIL_PHONE extends HTMLElement {
   }
 
   render() {
-    const style = `
-      :host{
-        display:block;
-        font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial;
-      }
-      .card{
-        border: 1px solid rgba(0,0,0,.12);
-        border-radius: 12px;
-        padding: 16px;
-        max-width: 420px;
-        box-shadow: 0 6px 18px rgba(0,0,0,.06);
-        background: #fff;
-      }
-      h3{ margin: 0 0 10px; font-size: 16px; }
-      label{ display:block; font-size: 12px; opacity:.8; margin: 12px 0 6px; }
-      input{
-        width:100%;
-        box-sizing:border-box;
-        padding: 10px 12px;
-        border-radius: 10px;
-        border: 1px solid rgba(0,0,0,.18);
-        outline: none;
-        font-size: 14px;
-      }
-      input:focus{
-        border-color: rgba(0,0,0,.35);
-        box-shadow: 0 0 0 3px rgba(0,0,0,.06);
-      }
-      .row{
-        display:flex;
-        gap:10px;
-        align-items:center;
-        margin-top: 14px;
-      }
-      button{
-        border: none;
-        border-radius: 10px;
-        padding: 10px 14px;
-        font-weight: 600;
-        cursor: pointer;
-        background: #111;
-        color: #fff;
-      }
-      button:disabled{ opacity:.6; cursor:not-allowed; }
-      .hint{ font-size: 12px; opacity:.7; margin-top: 6px; }
-      .msg{
-        display:none;
-        margin-top: 12px;
-        padding: 10px 12px;
-        border-radius: 10px;
-        font-size: 13px;
-      }
-      .msg[data-kind="error"]{
-        background: rgba(220, 38, 38, .08);
-        border: 1px solid rgba(220, 38, 38, .25);
-      }
-      .msg[data-kind="ok"]{
-        background: rgba(22, 163, 74, .10);
-        border: 1px solid rgba(22, 163, 74, .25);
-      }
-      .spinner{
-        display:none;
-        width: 14px; height: 14px;
-        border: 2px solid rgba(255,255,255,.35);
-        border-top-color: rgba(255,255,255,1);
-        border-radius: 999px;
-        animation: spin .8s linear infinite;
-        vertical-align: middle;
-      }
-      @keyframes spin { to { transform: rotate(360deg); } }
-    `;
-
     this.shadowRoot.innerHTML = `
-      <style>${style}</style>
-      <div class="card">
-        <h3>Registro de Email y Teléfono</h3>
+      <style>
+        :host{font-family:system-ui;display:block}
+        .card{max-width:420px;padding:16px;border-radius:12px;border:1px solid #ddd;background:#fff}
+        label{font-size:12px;margin-top:12px;display:block}
+        input{width:100%;padding:10px;border-radius:10px;border:1px solid #ccc}
+        button{margin-top:14px;padding:10px;border-radius:10px;border:none;background:#111;color:#fff}
+        .msg{margin-top:12px;padding:10px;border-radius:10px;display:none}
+        .msg[data-kind="error"]{background:#fee;border:1px solid #f99}
+        .msg[data-kind="ok"]{background:#efe;border:1px solid #9f9}
+        .spinner{display:none;margin-right:6px}
+      </style>
 
+      <div class="card">
         <label>Email</label>
-        <input id="email" type="email" placeholder="nombre@dominio.com" autocomplete="email" />
+        <input id="email" type="email" placeholder="nombre@dominio.com"/>
 
         <label>Teléfono móvil (Colombia)</label>
-        <input
-          id="phone"
-          type="tel"
-          inputmode="numeric"
-          placeholder="3XXXXXXXXX"
-          maxlength="10"
-          autocomplete="tel"
-        />
-        <div class="hint">Ingresa solo el número móvil colombiano (10 dígitos, inicia en 3). No incluyas +57.</div>
+        <input id="phone" type="tel" placeholder="3XXXXXXXXX" maxlength="10"/>
+        <small>Solo número móvil colombiano, sin +57</small>
 
-        <div class="row">
-          <button id="btn" type="button">
-            <span class="spinner" id="spinner"></span>
-            <span style="margin-left:8px;">Continuar</span>
-          </button>
-        </div>
+        <button id="btn">
+          <span class="spinner" id="spinner">⏳</span>
+          Continuar
+        </button>
 
         <div class="msg" id="msgBox" data-kind="error"></div>
       </div>
