@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Demo - SYE_TYC</title>
+    <style>
+      body{
+        margin:0;
+        padding:24px;
+        font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial;
+        background:#fafafa;
+      }
+      .wrap{ max-width: 720px; margin: 0 auto; }
+      .row{ display:flex; gap:12px; flex-wrap:wrap; margin-top: 16px; }
+      input{
+        padding:10px 12px; border-radius: 10px; border:1px solid #ddd;
+        min-width: 280px;
+      }
+      .log{
+        margin-top: 18px;
+        padding:12px;
+        border:1px solid #e6e6e6;
+        border-radius: 12px;
+        background:#fff;
+        white-space: pre-wrap;
+        font-size: 12px;
+      }
+      .hint{ font-size: 12px; color:#666; margin-top: 10px; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <h2>Demo SYE_TYC</h2>
+
+      <div class="row">
+        <input id="tx" placeholder="tokenTransaction (X-Transaction)" />
+        <input id="at" placeholder="accessToken (Bearer ...)" />
+      </div>
+
+      <p class="hint">
+        Nota: el endpoint se toma desde <b>.env</b> (VITE_REGISTER_TYC_URL).  
+        El componente emite eventos <b>sye:success</b> / <b>sye:error</b> y soporta callbacks.
+      </p>
+
+      <sye-tyc id="tyc"></sye-tyc>
+
+      <div class="log" id="log">(log)</div>
+    </div>
+
+    <script type="module">
+      // En dev: importa el entry del proyecto
+      import "../src/index.js";
+
+      const $log = document.querySelector("#log");
+      const $tyc = document.querySelector("#tyc");
+
+      const write = (obj) => {
+        $log.textContent = JSON.stringify(obj, null, 2);
+      };
+
+      // Eventos
+      $tyc.addEventListener("sye:success", (e) => write({ type: "event:success", ...e.detail }));
+      $tyc.addEventListener("sye:error", (e) => write({ type: "event:error", ...e.detail }));
+      $tyc.addEventListener("sye:choice", (e) => write({ type: "event:choice", ...e.detail }));
+
+      // Init con callbacks
+      const initNow = () => {
+        const tokenTransaction = document.querySelector("#tx").value.trim();
+        const accessToken = document.querySelector("#at").value.trim();
+
+        $tyc.init(
+          tokenTransaction,
+          accessToken,
+          {
+            title: "Términos y Condiciones",
+            description: "Selecciona Aceptar o Rechazar para registrar tu decisión.",
+            acceptText: "Aceptar",
+            denyText: "Rechazar"
+          },
+          {
+            onSuccess: (payload) => write({ type: "callback:onSuccess", ...payload }),
+            onError: (payload) => write({ type: "callback:onError", ...payload })
+          }
+        );
+      };
+
+      document.querySelector("#tx").addEventListener("input", initNow);
+      document.querySelector("#at").addEventListener("input", initNow);
+
+      initNow();
+    </script>
+  </body>
+</html>

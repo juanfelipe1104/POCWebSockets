@@ -1,0 +1,14 @@
+{
+  "name": "sye-tyc-webcomponent",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host --port 5173",
+    "build": "vite build",
+    "preview": "vite preview --host --port 5173"
+  },
+  "devDependencies": {
+    "vite": "^5.4.0"
+  }
+}
