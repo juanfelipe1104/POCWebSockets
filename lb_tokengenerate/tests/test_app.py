@@ -61,7 +61,6 @@ def test_extract_claims_data_not_object():
     with pytest.raises(BadRequest):
         _extract_claims({"data": ["x"]})
 
-
 def test_create_token_includes_iat_exp(monkeypatch):
     monkeypatch.setenv("JWT_KEY", "k")
     now = 1700000000
@@ -71,10 +70,15 @@ def test_create_token_includes_iat_exp(monkeypatch):
     assert payload["iat"] == now
     assert payload["exp"] == now + 60
 
-    decoded = jwt.decode(token, "k", algorithms=["HS256"])
+    decoded = jwt.decode(
+        token,
+        "k",
+        algorithms=["HS256"],
+        options={"verify_exp": False},
+    )
     assert decoded["role"] == "admin"
     assert decoded["iat"] == now
-    assert decoded["exp"] == now + 60
+    assert decoded["exp"] == now + 60    
 
 
 def test_create_token_missing_env_key(monkeypatch):
