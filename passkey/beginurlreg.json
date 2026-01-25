@@ -1,0 +1,30 @@
+{
+  "publicKey": {
+    "rp": {
+      "id": "example.com",
+      "name": "Example Inc"
+    },
+    "user": {
+      "id": "BASE64URL_USER_ID",
+      "name": "alba@correo.com",
+      "displayName": "Alba"
+    },
+    "challenge": "BASE64URL_CHALLENGE",
+    "pubKeyCredParams": [
+      { "type": "public-key", "alg": -7 },
+      { "type": "public-key", "alg": -257 }
+    ],
+    "timeout": 60000,
+    "attestation": "none",
+    "authenticatorSelection": {
+      "residentKey": "preferred",
+      "userVerification": "required"
+    },
+    "excludeCredentials": [
+      {
+        "type": "public-key",
+        "id": "BASE64URL_EXISTING_CREDENTIAL_ID"
+      }
+    ]
+  }
+}

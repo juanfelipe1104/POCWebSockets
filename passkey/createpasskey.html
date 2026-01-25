@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Crear Passkey</title>
+  <style>
+    body { font-family: system-ui, Arial, sans-serif; max-width: 720px; margin: 40px auto; padding: 0 16px; }
+    .card { border: 1px solid #ddd; border-radius: 12px; padding: 16px; margin: 16px 0; }
+    button { padding: 12px 16px; border-radius: 10px; border: 0; cursor: pointer; background: #111; color: #fff; font-size: 16px; }
+    button:disabled { opacity: .6; cursor: not-allowed; }
+    pre { background: #0b1020; color: #d6e3ff; padding: 12px; border-radius: 12px; overflow:auto; }
+    .ok { color: #0a7a2f; font-weight: 700; }
+    .err { color: #b00020; font-weight: 700; }
+  </style>
+</head>
+<body>
+  <h1>Crear Passkey</h1>
+
+  <div class="card">
+    <button id="btnCreate">Crear passkey</button>
+    <div id="status" style="margin-top:12px;"></div>
+  </div>
+
+  <div class="card">
+    <pre id="log"></pre>
+  </div>
+
+<script>
+  // ==========================
+  // CONFIG
+  // ==========================
+  const BEGIN_REG_URL  = "https://TU_DOMINIO.com/beginRegistration";
+  const FINISH_REG_URL = "https://TU_DOMINIO.com/finishRegistration";
+
+  // Headers estándar
+  const X_TRANSACTION  = "TX-CLIENT-STATIC-001";   // puedes generar uno si quieres
+  const X_COMPONENT_ID = "createpasskey-ui";
+
+  // Body opcional para begin
+  const BEGIN_BODY = {
+    // username: "usuario@correo.com"
+  };
+
+  // ==========================
+  // Base64URL helpers
+  // ==========================
+  function base64urlToArrayBuffer(b64url) {
+    const padding = "=".repeat((4 - (b64url.length % 4)) % 4);
+    const b64 = (b64url + padding).replace(/-/g, "+").replace(/_/g, "/");
+    const raw = atob(b64);
+    const bytes = new Uint8Array(raw.length);
+    for (let i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i);
+    return bytes.buffer;
+  }
+
+  function arrayBufferToBase64url(buffer) {
+    const bytes = new Uint8Array(buffer);
+    let s = "";
+    for (const b of bytes) s += String.fromCharCode(b);
+    return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+  }
+
+  // ==========================
+  // UI helpers
+  // ==========================
+  const $ = (id) => document.getElementById(id);
+  const logEl = $("log");
+  const statusEl = $("status");
+
+  function setStatus(text, kind) {
+    statusEl.innerHTML = `<p class="${kind === "ok" ? "ok" : kind === "err" ? "err" : ""}">${text}</p>`;
+  }
+
+  function log(...args) {
+    const msg = args.map(a => (typeof a === "string" ? a : JSON.stringify(a, null, 2))).join(" ");
+    logEl.textContent += msg + "\n";
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  function clearLog() {
+    logEl.textContent = "";
+    statusEl.textContent = "";
+  }
+
+  // ==========================
+  // HTTP helper
+  // ==========================
+  async function postJson(url, body) {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "X-Transaction": X_TRANSACTION,
+        "X-ComponentId": X_COMPONENT_ID
+      },
+      body: JSON.stringify(body ?? {})
+    });
+
+    const txt = await res.text();
+    let json;
+    try { json = JSON.parse(txt); } catch { json = { raw: txt }; }
+
+    if (!res.ok) {
+      const err = new Error(`HTTP ${res.status}`);
+      err.details = json;
+      throw err;
+    }
+    return json;
+  }
+
+  // ==========================
+  // Normalize creation options
+  // ==========================
+  function normalizeCreationOptions(publicKeyFromServer) {
+    const pk = structuredClone(publicKeyFromServer);
+
+    pk.challenge = base64urlToArrayBuffer(pk.challenge);
+    pk.user.id = base64urlToArrayBuffer(pk.user.id);
+
+    if (Array.isArray(pk.excludeCredentials)) {
+      pk.excludeCredentials = pk.excludeCredentials.map(c => ({
+        ...c,
+        id: base64urlToArrayBuffer(c.id)
+      }));
+    }
+
+    return pk;
+  }
+
+  // ==========================
+  // Build finish payload
+  // ==========================
+  function buildFinishRegistrationPayload(credential) {
+    return {
+      id: credential.id,
+      rawId: arrayBufferToBase64url(credential.rawId),
+      type: credential.type,
+      response: {
+        clientDataJSON: arrayBufferToBase64url(credential.response.clientDataJSON),
+        attestationObject: arrayBufferToBase64url(credential.response.attestationObject)
+      }
+    };
+  }
+
+  // ==========================
+  // Main flow
+  // ==========================
+  async function createPasskey() {
+    clearLog();
+
+    if (!window.PublicKeyCredential || !navigator.credentials) {
+      setStatus("Este navegador no soporta WebAuthn.", "err");
+      return;
+    }
+
+    $("btnCreate").disabled = true;
+
+    try {
+      setStatus("1) Solicitando options al servidor...", "");
+      log("POST", BEGIN_REG_URL);
+
+      const beginResponse = await postJson(BEGIN_REG_URL, BEGIN_BODY);
+      log("Begin response:", beginResponse);
+
+      // Se espera: { publicKey }
+      const publicKeyFromServer = beginResponse.publicKey;
+      if (!publicKeyFromServer) throw new Error("BeginRegistration no devolvió publicKey");
+
+      setStatus("2) Creando passkey en el dispositivo...", "");
+      const publicKey = normalizeCreationOptions(publicKeyFromServer);
+
+      const credential = await navigator.credentials.create({ publicKey });
+      if (!credential) throw new Error("navigator.credentials.create devolvió null");
+
+      log("Credential created:", credential.id);
+
+      setStatus("3) Enviando attestation al servidor...", "");
+      const finishPayload = buildFinishRegistrationPayload(credential);
+
+      log("POST", FINISH_REG_URL);
+      log("Finish payload:", finishPayload);
+
+      const finishResponse = await postJson(FINISH_REG_URL, finishPayload);
+      log("Finish response:", finishResponse);
+
+      if (finishResponse.code === 200) {
+        setStatus("✅ Passkey creada correctamente.", "ok");
+      } else {
+        setStatus(`❌ Error del servidor: ${finishResponse.message}`, "err");
+      }
+
+    } catch (e) {
+      console.error(e);
+      setStatus(`❌ Error: ${e.message}`, "err");
+      if (e.details) log("Detalles:", e.details);
+      else log("Detalles:", String(e));
+    } finally {
+      $("btnCreate").disabled = false;
+    }
+  }
+
+  $("btnCreate").addEventListener("click", createPasskey);
+</script>
+</body>
+</html>

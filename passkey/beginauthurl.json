@@ -1,0 +1,18 @@
+{
+  "publicKey": {
+    "challenge": "BASE64URL_CHALLENGE",
+    "rpId": "example.com",
+    "timeout": 60000,
+    "userVerification": "required",
+    "allowCredentials": [
+      {
+        "type": "public-key",
+        "id": "BASE64URL_CREDENTIAL_ID_1"
+      },
+      {
+        "type": "public-key",
+        "id": "BASE64URL_CREDENTIAL_ID_2"
+      }
+    ]
+  }
+}
